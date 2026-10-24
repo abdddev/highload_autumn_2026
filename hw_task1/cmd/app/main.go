@@ -16,6 +16,7 @@ import (
 
 	"hw_task1/internal/handlers"
 	"hw_task1/internal/storage"
+	"hw_task1/pkg/monitoring"
 )
 
 type config struct {
@@ -72,8 +73,12 @@ func run(cfg config) error {
 	log := slog.With("pod", cfg.podID, "dc", cfg.dc)
 
 	mux := http.NewServeMux()
-	handlers.NewItems(storage.New(), cfg.errorRate).Register(mux)
+	mon := monitoring.New(mux, monitoring.Config{Pod: cfg.podID, DC: cfg.dc})
+	handlers.NewItems(storage.New(), cfg.errorRate).Register(mon)
+
 	mux.HandleFunc("GET /health", handlers.Health)
+	mux.Handle("GET /metrics", mon.MetricsHandler())
+	mux.Handle("GET /handlers", mon.HandlersHandler())
 
 	srv := &http.Server{
 		Addr:              cfg.addr,
