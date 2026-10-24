@@ -1,0 +1,95 @@
+name: hw1
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+x-app: &app
+  build: .
+  image: hw1-app:local
+  environment: &app-env
+    ERROR_RATE: ${ERROR_RATE:-0.02}
+    LATENCY_MS: ${LATENCY_MS:-5}
+  healthcheck:
+    test: ["CMD", "/app", "-healthcheck"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+  mem_limit: 256m
+  cpus: 0.5
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  app-1:
+    <<: *app
+    environment:
+      <<: *app-env
+      POD_ID: "1"
+      DATACENTER: dc1
+    ports: ["127.0.0.1:8081:8080"]
+
+  app-2:
+    <<: *app
+    environment:
+      <<: *app-env
+      POD_ID: "2"
+      DATACENTER: dc2
+    ports: ["127.0.0.1:8082:8080"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 1g
+    cpus: 1.0
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run cp .env.example .env first}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    depends_on:
+      prometheus: {condition: service_healthy}
+    mem_limit: 768m
+    cpus: 1.0
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  prometheus-data:
+  grafana-data:
