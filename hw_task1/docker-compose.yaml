@@ -112,6 +112,26 @@ services:
     restart: "no"
     logging: *logging
 
+  k6:
+    image: grafana/k6:1.3.0
+    command: ["run", "--quiet", "/scripts/load.js"]
+    volumes: ["./load:/scripts:ro"]
+    environment:
+      TARGETS: http://app-1:8080,http://app-2:8080
+      START_RPS: ${LOAD_START_RPS:-5}
+      TARGET_RPS: ${LOAD_TARGET_RPS:-40}
+      RAMP_UP: ${LOAD_RAMP_UP:-3m}
+    depends_on:
+      app-1: {condition: service_healthy}
+      app-2: {condition: service_healthy}
+      dashboard-generator: {condition: service_completed_successfully}
+    mem_limit: 256m
+    cpus: 0.5
+    <<: *hardening
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    logging: *logging
+
 volumes:
   prometheus-data:
   grafana-data:

@@ -8,7 +8,7 @@ COMPOSE := docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help run up down restart clean ps logs grafana
+.PHONY: help run up down restart clean ps logs grafana load
 
 help:
 	@echo "make run      - запустить приложение локально без Docker"
@@ -19,6 +19,7 @@ help:
 	@echo "make ps       - статус контейнеров"
 	@echo "make logs     - логи всех сервисов (make logs s=app-1 - одного)"
 	@echo "make grafana  - открыть дашборд в браузере"
+	@echo "make load     - перезапустить нагрузку k6"
 
 run:
 	ADDR=$(ADDR) POD_ID=$(POD_ID) DATACENTER=$(DATACENTER) ERROR_RATE=$(ERROR_RATE) LATENCY_MS=$(LATENCY_MS) \
@@ -29,7 +30,6 @@ run:
 
 up: | .env
 	$(COMPOSE) up -d --build
-	$(COMPOSE) wait dashboard-generator
 
 down: | .env
 	$(COMPOSE) down
@@ -47,3 +47,6 @@ logs: | .env
 
 grafana:
 	xdg-open http://localhost:3000/d/hw1-handlers
+
+load: | .env
+	$(COMPOSE) restart k6
