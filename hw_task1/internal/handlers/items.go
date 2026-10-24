@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"hw_task1/internal/storage"
 )
@@ -17,18 +19,19 @@ type Router interface {
 }
 
 type Items struct {
-	store     *storage.Storage
-	errorRate float64
+	store         *storage.Storage
+	errorRate     float64
+	medianLatency time.Duration
 }
 
-func NewItems(store *storage.Storage, errorRate float64) *Items {
-	return &Items{store: store, errorRate: errorRate}
+func NewItems(store *storage.Storage, errorRate float64, medianLatency time.Duration) *Items {
+	return &Items{store: store, errorRate: errorRate, medianLatency: medianLatency}
 }
 
 func (h *Items) Register(r Router) {
-	r.Handle("POST /items", h.withFailures(h.create))
-	r.Handle("GET /items/{id}", h.withFailures(h.get))
-	r.Handle("PUT /items/{id}", h.withFailures(h.update))
+	r.Handle("POST /items", h.withChaos(h.create))
+	r.Handle("GET /items/{id}", h.withChaos(h.get))
+	r.Handle("PUT /items/{id}", h.withChaos(h.update))
 }
 
 func Health(w http.ResponseWriter, _ *http.Request) {
@@ -79,8 +82,21 @@ func (h *Items) update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (h *Items) withFailures(next http.HandlerFunc) http.Handler {
+const (
+	latencySigma = 0.8
+	maxLatency   = 2 * time.Second
+)
+
+func (h *Items) withChaos(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.medianLatency > 0 {
+			d := time.Duration(float64(h.medianLatency) * math.Exp(latencySigma*rand.NormFloat64()))
+			select {
+			case <-time.After(min(d, maxLatency)):
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if h.errorRate > 0 && rand.Float64() < h.errorRate {
 			writeError(w, http.StatusInternalServerError, "injected failure")
 			return

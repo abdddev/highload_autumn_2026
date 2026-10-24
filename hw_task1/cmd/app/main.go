@@ -20,10 +20,11 @@ import (
 )
 
 type config struct {
-	addr      string
-	errorRate float64
-	podID     string
-	dc        string
+	addr          string
+	errorRate     float64
+	medianLatency time.Duration
+	podID         string
+	dc            string
 }
 
 func loadConfig() (config, error) {
@@ -38,6 +39,13 @@ func loadConfig() (config, error) {
 			return cfg, fmt.Errorf("ERROR_RATE must be a number in [0, 1], got %q", v)
 		}
 		cfg.errorRate = rate
+	}
+	if v := os.Getenv("LATENCY_MS"); v != "" {
+		ms, err := strconv.ParseFloat(v, 64)
+		if err != nil || ms < 0 {
+			return cfg, fmt.Errorf("LATENCY_MS must be a non-negative number, got %q", v)
+		}
+		cfg.medianLatency = time.Duration(ms * float64(time.Millisecond))
 	}
 	return cfg, nil
 }
@@ -74,7 +82,7 @@ func run(cfg config) error {
 
 	mux := http.NewServeMux()
 	mon := monitoring.New(mux, monitoring.Config{Pod: cfg.podID, DC: cfg.dc})
-	handlers.NewItems(storage.New(), cfg.errorRate).Register(mon)
+	handlers.NewItems(storage.New(), cfg.errorRate, cfg.medianLatency).Register(mon)
 
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.Handle("GET /metrics", mon.MetricsHandler())
@@ -94,7 +102,7 @@ func run(cfg config) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.addr, "error_rate", cfg.errorRate)
+		log.Info("listening", "addr", cfg.addr, "error_rate", cfg.errorRate, "median_latency", cfg.medianLatency)
 		errCh <- srv.ListenAndServe()
 	}()
 

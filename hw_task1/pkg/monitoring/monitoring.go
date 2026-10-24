@@ -35,7 +35,7 @@ type Monitor struct {
 	handlers []HandlerInfo
 }
 
-var durationBuckets = prometheus.ExponentialBuckets(0.00005, 2, 16)
+var durationBuckets = prometheus.ExponentialBucketsRange(0.0005, 5, 20)
 
 func New(mux *http.ServeMux, cfg Config) *Monitor {
 	constLabels := prometheus.Labels{"pod": cfg.Pod, "dc": cfg.DC}
