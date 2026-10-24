@@ -88,15 +88,15 @@ func buildDashboard(handlers []string, dsUID string) dashboard {
 	}
 
 	id, y := 1, 0
-	for _, h := range handlers {
+	addRow := func(title string, panels []panel) {
 		collapsed := false
 		d.Panels = append(d.Panels, panel{
-			ID: id, Type: "row", Title: h, Collapsed: &collapsed, Panels: []panel{},
+			ID: id, Type: "row", Title: title, Collapsed: &collapsed, Panels: []panel{},
 			GridPos: gridPos{H: 1, W: 24, X: 0, Y: y},
 		})
 		id, y = id+1, y+1
 
-		for i, p := range handlerPanels(ds, h) {
+		for i, p := range panels {
 			p.ID = id
 			p.GridPos = gridPos{H: 8, W: 8, X: i * 8, Y: y}
 			d.Panels = append(d.Panels, p)
@@ -104,7 +104,39 @@ func buildDashboard(handlers []string, dsUID string) dashboard {
 		}
 		y += 8
 	}
+
+	addRow("Overview", overviewPanels(ds))
+	for _, h := range handlers {
+		addRow(h, handlerPanels(ds, h))
+	}
 	return d
+}
+
+func overviewPanels(ds datasourceRef) []panel {
+	requests := fmt.Sprintf("http_requests_total{%s}", selector)
+	errors := fmt.Sprintf(`http_requests_total{code=~"4..|5..",%s}`, selector)
+	bucket := fmt.Sprintf("http_request_duration_seconds_bucket{%s}", selector)
+
+	return []panel{
+		timeseries(ds, "RPS by handler", "reqps", "", []target{
+			{
+				RefID: "A", Datasource: ds, LegendFormat: "{{handler}}",
+				Expr: fmt.Sprintf("sum by (handler) (rate(%s[$__rate_interval]))", requests),
+			},
+			{
+				RefID: "B", Datasource: ds, LegendFormat: "total",
+				Expr: fmt.Sprintf("sum(rate(%s[$__rate_interval]))", requests),
+			},
+		}),
+		timeseries(ds, "Error rate by handler", "percent", "0", []target{{
+			RefID: "A", Datasource: ds, LegendFormat: "{{handler}}",
+			Expr: fmt.Sprintf("100 * sum by (handler) (rate(%s[$__rate_interval])) / sum by (handler) (rate(%s[$__rate_interval]))", errors, requests),
+		}}),
+		timeseries(ds, "p99 latency by handler", "s", "", []target{{
+			RefID: "A", Datasource: ds, LegendFormat: "{{handler}}",
+			Expr: fmt.Sprintf("histogram_quantile(0.99, sum by (le, handler) (rate(%s[$__rate_interval])))", bucket),
+		}}),
+	}
 }
 
 func labelVariable(ds datasourceRef, name, label, query string) variable {
