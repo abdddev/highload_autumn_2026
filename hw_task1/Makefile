@@ -12,7 +12,7 @@ COMPOSE := docker compose
 
 help:
 	@echo "make run      - запустить приложение локально без Docker"
-	@echo "make up       - собрать и поднять стек в фоне, дождаться healthcheck"
+	@echo "make up       - собрать и поднять стек в фоне, дождаться генерации дашборда"
 	@echo "make down     - остановить стек"
 	@echo "make restart  - down + up (перегенерирует дашборд)"
 	@echo "make clean    - остановить стек и удалить данные Prometheus/Grafana"
@@ -28,7 +28,8 @@ run:
 	cp .env.example .env
 
 up: | .env
-	$(COMPOSE) up -d --build --wait
+	$(COMPOSE) up -d --build
+	$(COMPOSE) wait dashboard-generator
 
 down: | .env
 	$(COMPOSE) down

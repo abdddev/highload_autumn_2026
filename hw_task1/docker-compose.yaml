@@ -4,8 +4,13 @@ x-logging: &logging
   driver: json-file
   options: {max-size: "10m", max-file: "3"}
 
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
 x-app: &app
-  build: .
+  build: {context: ., target: app}
   image: hw1-app:local
   environment: &app-env
     ERROR_RATE: ${ERROR_RATE:-0.02}
@@ -17,9 +22,7 @@ x-app: &app
     retries: 12
   mem_limit: 256m
   cpus: 0.5
-  read_only: true
-  cap_drop: [ALL]
-  security_opt: [no-new-privileges:true]
+  <<: *hardening
   restart: unless-stopped
   logging: *logging
 
@@ -88,6 +91,25 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
+    logging: *logging
+
+  dashboard-generator:
+    build: {context: ., target: dashboard-generator}
+    image: hw1-dashboard-generator:local
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GRAFANA_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run cp .env.example .env first}
+      APP_URLS: http://app-1:8080,http://app-2:8080
+      DATASOURCE_UID: prometheus
+    depends_on:
+      app-1: {condition: service_healthy}
+      app-2: {condition: service_healthy}
+      grafana: {condition: service_healthy}
+    mem_limit: 64m
+    cpus: 0.25
+    <<: *hardening
+    restart: "no"
     logging: *logging
 
 volumes:
