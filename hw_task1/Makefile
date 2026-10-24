@@ -1,0 +1,9 @@
+ADDR       ?= :8080
+POD_ID     ?= 1
+DATACENTER ?= dc1
+ERROR_RATE ?= 0.02
+
+.PHONY: run
+run:
+	ADDR=$(ADDR) POD_ID=$(POD_ID) DATACENTER=$(DATACENTER) ERROR_RATE=$(ERROR_RATE) \
+		go run ./cmd/app

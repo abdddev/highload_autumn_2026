@@ -1,0 +1,3 @@
+module hw_task1
+
+go 1.27.2
